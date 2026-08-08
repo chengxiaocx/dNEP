@@ -1,0 +1,1533 @@
+---
+title: "nep_101025"
+author: "Cheng Xiao"
+date: "2026-05-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list=ls())
+
+source("/Users/cx/Desktop/EP/2meaning/data/summarySE.R")
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(report)
+library(see)
+library(parameters)
+library(performance)
+library(car)
+library(lme4)
+library(lmerTest)
+library(lsmeans)
+library(emmeans)
+library(Rmisc)
+library(lsr)
+library(multcomp)
+library(caret)
+```
+
+# accuracy results
+
+```{r}
+nep<-read.table('/Users/cx/Desktop/NEP/results/behavioral_results/eprime_beh/NEP_beh_results_re.csv',header=TRUE, sep=',')
+
+```
+
+
+```{r}
+
+tapply(nep$slideRate.ACC,nep$Group,mean)
+tapply(nep$slideRate.ACC,nep$Group,sd)
+
+tapply(nep$slideRate.ACC,nep$Congruence,mean)
+tapply(nep$slideRate.ACC,nep$Congruence,sd)
+
+tapply(nep$slideRate.ACC,nep$Prosody,mean)
+tapply(nep$slideRate.ACC,nep$Prosody,sd)
+
+tapply(nep$slideRate.ACC,nep$Stimuli,mean)
+tapply(nep$slideRate.ACC,nep$Stimuli,sd)
+
+
+nep_L2 <- subset(nep,Group=='learner')
+nep_L1 <- subset(nep,Group=='native')
+
+tapply(nep_L1$slideRate.ACC,nep_L1$Congruence,mean)
+tapply(nep_L1$slideRate.ACC,nep_L1$Congruence,sd)
+
+tapply(nep_L2$slideRate.ACC,nep_L2$Congruence,mean)
+tapply(nep_L2$slideRate.ACC,nep_L2$Congruence,sd)
+
+tapply(nep_L1$slideRate.ACC,nep_L1$Prosody,mean)
+tapply(nep_L1$slideRate.ACC,nep_L1$Prosody,sd)
+
+tapply(nep_L2$slideRate.ACC,nep_L2$Prosody,mean)
+tapply(nep_L2$slideRate.ACC,nep_L2$Prosody,sd)
+
+tapply(nep_L1$slideRate.ACC,nep_L1$Stimuli,mean)
+tapply(nep_L1$slideRate.ACC,nep_L1$Stimuli,sd)
+
+tapply(nep_L2$slideRate.ACC,nep_L2$Stimuli,mean)
+tapply(nep_L2$slideRate.ACC,nep_L2$Stimuli,sd)
+
+##clean for RT
+clean_nep <- nep[nep$slideRate.ACC != 0, ] 
+clean_nep <- clean_nep[clean_nep$slideRate.RT > 200, ]
+clean_nep <- na.omit(clean_nep)
+
+# Per-subject RT outlier removal (>3 SD from subject's mean RT)
+remove_outliers <- function(df, sd_threshold = 3) {
+  result <- data.frame()
+  subjects <- unique(df$Subject)
+  for (subject in subjects) {
+    subset_df <- df[df$Subject == subject, ]
+    mean_rt <- mean(subset_df$slideRate.RT)
+    sd_rt <- sd(subset_df$slideRate.RT)
+    subset_df <- subset_df[abs(subset_df$slideRate.RT - mean_rt) <= sd_threshold * sd_rt, ]
+    result <- rbind(result, subset_df)
+  }
+  return(result)
+}
+
+clean_nep <- remove_outliers(clean_nep)
+
+tapply(clean_nep$slideRate.RT,clean_nep$Group,mean, na.rm = TRUE)
+tapply(clean_nep$slideRate.RT,clean_nep$Group,sd, na.rm = TRUE)
+
+tapply(clean_nep$slideRate.RT,clean_nep$Congruence,mean,  na.rm = TRUE)
+tapply(clean_nep$slideRate.RT,clean_nep$Congruence,sd,  na.rm = TRUE)
+
+tapply(clean_nep$slideRate.RT,clean_nep$Prosody,mean,  na.rm = TRUE)
+tapply(clean_nep$slideRate.RT,clean_nep$Prosody,sd,  na.rm = TRUE)
+
+tapply(clean_nep$slideRate.RT,clean_nep$Stimuli,mean)
+tapply(clean_nep$slideRate.RT,clean_nep$Stimuli,sd)
+
+
+```
+
+```{r}
+nep_acc <- summarySE(data=nep, measurevar="slideRate.ACC", groupvars=c("Group","Prosody",'Congruence'))
+nep_rt <- summarySE(data=clean_nep, measurevar="slideRate.RT", groupvars=c("Group","Prosody",'Congruence'), na.rm = TRUE)
+
+
+ggplot(nep_acc, aes(x = Prosody, y = slideRate.ACC, fill = Congruence)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(width = 0.15, position = position_dodge(1), aes(ymin = slideRate.ACC - se, ymax = slideRate.ACC + se)) +
+  scale_y_continuous("Accuracy") +
+  facet_wrap('Group', labeller = labeller(Group = c("native" = "Native Group", "learner" = "Learner Group"))) +
+  xlab("Emotional prosody") +
+  scale_fill_manual(values = c("congruent" = "orange", "incongruent" = "darkgreen", "neutral" = "white"))+
+  coord_cartesian(ylim = c(0.4, 1))
+
+
+ggplot(nep_rt, aes(x = Prosody, y = slideRate.RT, fill = Congruence)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(width = 0.15, position = position_dodge(1), aes(ymin = slideRate.RT - se, ymax = slideRate.RT + se)) +
+  scale_y_continuous("RT") +
+  facet_wrap('Group', labeller = labeller(Group = c("native" = "Native Group", "learner" = "Learner Group"))) +
+  xlab("Emotional prosody") +
+  scale_fill_manual(values = c("congruent" = "orange", "incongruent" = "darkgreen", "neutral" = "white")) 
+
+```
+
+
+```{r}
+#fig1
+nep_acc <- summarySE(data = nep, measurevar = "slideRate.ACC", groupvars = c("Group", "Stimuli"))
+nep_rt <- summarySE(data = clean_nep, measurevar = "slideRate.RT", groupvars = c("Group", "Stimuli"), na.rm = TRUE)
+
+
+
+# Reorder Group factor: native first, learner second
+nep_acc$Group <- factor(nep_acc$Group, levels = c("native", "learner"))
+nep_rt$Group <- factor(nep_rt$Group, levels = c("native", "learner"))
+
+ggplot(nep_acc, aes(x = Stimuli, y = slideRate.ACC, fill = Group)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(0.9)) +
+  geom_errorbar(width = 0.15, position = position_dodge(0.9), 
+                aes(ymin = slideRate.ACC - ci, ymax = slideRate.ACC + ci)) +
+  scale_y_continuous("Mean Accuracy", expand = expansion(mult = c(0, 0.2)))+
+  xlab("Lexicality") +
+  scale_x_discrete(labels = c("real" = "Real-word stimuli", "pseudo" = "Pseudo-word stimuli")) +
+  scale_fill_manual(
+    values = c("native" = "orange", "learner" = "darkgreen"),
+    labels = c("native" = "Native speakers", "learner" = "L2 learners"),
+    name = "Group"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10)
+  )
+
+ggplot(nep_rt, aes(x = Stimuli, y = slideRate.RT, fill = Group)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(0.9)) +
+  geom_errorbar(width = 0.15, position = position_dodge(0.9), 
+                aes(ymin = slideRate.RT - ci, ymax = slideRate.RT + ci)) +
+  scale_y_continuous("Mean Reaction Time", expand = expansion(mult = c(0, 0.2))) +
+  xlab("Lexicality") +
+  scale_x_discrete(labels = c("real" = "Real-word stimuli", "pseudo" = "Pseudo-word stimuli")) +
+  scale_fill_manual(
+    values = c("native" = "orange", "learner" = "darkgreen"),
+    labels = c("native" = "Native speakers", "learner" = "L2 learners"),
+    name = "Group"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10)
+  )
+
+```
+
+
+
+```{r}
+
+nep$Congruence = factor(nep$Congruence, levels =c('incongruent','neutral','congruent'))
+levels(nep$Congruence)
+
+m1 <- glmer(data=nep, formula =slideRate.ACC~Group+Congruence+Prosody+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(m1)
+emmeans::emmeans(m1, pairwise ~ Congruence, type = "response")
+
+clean_nep$Congruence = factor(clean_nep$Congruence, levels =c('neutral','congruent','incongruent'))
+levels(clean_nep$Congruence)
+
+m2 <- lmer(data=clean_nep, formula =slideRate.RT~Group+Congruence+Prosody+(1|Subject))
+summary(m2)
+```
+
+```{r}
+nep_native <- subset(nep, Group == "native")
+nep_learner <- subset(nep, Group == "learner")
+
+# Native group model
+m1_native <- glmer(slideRate.ACC ~ Congruence + Prosody + (1|Subject),
+                    data = nep_native,
+                    family = binomial,
+                    control = glmerControl(optimizer = 'bobyqa'))
+summary(m1_native)
+emmeans::emmeans(m1_native, pairwise ~ Congruence, type = "response")
+
+# Learner group model
+m1_learner <- glmer(slideRate.ACC ~ Congruence + Prosody + (1|Subject),
+                     data = nep_learner,
+                     family = binomial,
+                     control = glmerControl(optimizer = 'bobyqa'))
+summary(m1_learner)
+emmeans::emmeans(m1_learner, pairwise ~ Congruence, type = "response")
+```
+
+
+```{r}
+
+M0 <- glmer(data=nep, formula =slideRate.ACC~Group*Stimuli+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M0)
+
+m0 <- lmer(data=clean_nep, formula =slideRate.RT~Group*Stimuli+(1|Subject))
+summary(m0)
+
+```
+
+
+```{r}
+nep_real<- subset(nep, Stimuli == "real")
+M1 <- glmer(data=nep_real, formula =slideRate.ACC~Group+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M1)
+
+
+
+nep_pseudo<- subset(nep, Stimuli == "pseudo")
+M2 <- glmer(data=nep_pseudo, formula =slideRate.ACC~Group+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M2)
+```
+```{r}
+nep_real_rt<- subset(clean_nep, Stimuli == "real")
+M3 <- lmer(data=nep_real_rt, formula =slideRate.RT~Group+(1|Subject))
+summary(M3)
+
+
+
+nep_pseudo_rt<- subset(clean_nep, Stimuli == "pseudo")
+M4 <- lmer(data=nep_pseudo_rt, formula =slideRate.RT~Group+(1|Subject))
+summary(M4)
+```
+
+```{r}
+
+#use this,fig2b
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+# Reorder Group factor: native first, learner second
+nep_acc$Group <- factor(nep_acc$Group, levels = c("native", "learner"))
+nep_rt$Group <- factor(nep_rt$Group, levels = c("native", "learner"))
+df <- read.csv("/Users/cx/Desktop/dNEP/parcel_ttest_all_contrasts_smoothed10.csv",
+                stringsAsFactors = FALSE)
+
+parcel_info <- read.delim("/Users/cx/Desktop/dNEP/glasser_parcellation_information.tsv",
+                           stringsAsFactors = FALSE) %>%
+  rename(parcel_num = 'Parcel.Number') %>%
+  dplyr::select(parcel_num, parcel_name = parcel, section, section_num) %>%
+  mutate(section = gsub("_", " ", section))
+
+## 1. Keep only significant real_vs_fake parcels, attach parcel name ---
+sig_df <- df %>%
+  filter(contrast == "real_vs_fake",
+         significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  left_join(parcel_info, by = c("parcel" = "parcel_num"))
+
+## 2. Reshape means and SEs into long format ---------------------------
+sig_long <- sig_df %>%
+  dplyr::select(parcel_name, t_stat, native_mean, native_se, l2_mean, l2_se) %>%
+  pivot_longer(
+    cols = c(native_mean, native_se, l2_mean, l2_se),
+    names_to = c("Group", ".value"),
+    names_pattern = "(native|l2)_(mean|se)"
+  ) %>%
+  mutate(Group = recode(Group, native = "Native speakers", l2 = "L2 learners"),
+         Group = factor(Group, levels = c("Native speakers", "L2 learners")))
+
+## 3. Three-way grouping
+parcel_order <- tribble(
+  ~parcel_name, ~group_label, ~pos,
+  "A4",         "Auditory",    1,
+  "A5",         "Auditory",    2,
+  "STGa",       "Auditory",    3,
+  "STSdp",      "Auditory",    4,
+  "TA2",        "Auditory",    5,
+  "PBelt",     "Auditory",    6,
+  #"44",        "Cognitive",    6,
+  "45",        "Cognitive",    7,
+  "IFJa",       "Cognitive",     8,
+  "IFJp",       "Cognitive",     9,
+  "IFSa",       "Cognitive",     10,
+  "IFSp",       "Cognitive",     11,
+  "p9-46v",     "Cognitive",    12,
+  "IP1",        "Cognitive",    13,
+  "TPOJ1",      "Cognitive",    14,
+  "55b",        "Affective",    15,
+  "PI",         "Affective",    16,
+  "FOP5",       "Affective",    17
+)
+
+sig_long <- sig_long %>%
+  left_join(parcel_order, by = "parcel_name") %>%
+  mutate(
+    group_label = factor(group_label,
+                          levels = c("Auditory", "Cognitive", "Affective")),
+    parcel_name = reorder(parcel_name, pos)
+  )
+
+## 3b. Significance stars
+star_lookup <- sig_df %>%
+  mutate(parcel_name = as.character(parcel_name),
+         p_fdr = as.numeric(p_fdr),
+         significant_fdr = significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  dplyr::select(parcel_name, p_fdr, significant_fdr)
+
+star_df <- sig_long %>%
+  mutate(parcel_name_chr = as.character(parcel_name)) %>%
+  group_by(parcel_name, parcel_name_chr, group_label) %>%
+  summarise(y_star = max(mean + se, na.rm = TRUE), .groups = "drop") %>%
+  left_join(star_lookup, by = c("parcel_name_chr" = "parcel_name")) %>%
+  mutate(
+    stars = case_when(
+      !significant_fdr ~ "",
+      is.na(p_fdr)      ~ "*",
+      p_fdr < 0.001     ~ "***",
+      p_fdr < 0.01      ~ "**",
+      TRUE              ~ "*"
+    )
+  ) %>%
+  filter(stars != "")
+
+message("Parcels with stars: ", nrow(star_df), " / ", n_distinct(sig_long$parcel_name))
+
+## 3c. Bracket coordinates
+bracket_df <- parcel_order %>%
+  filter(parcel_name %in% unique(sig_long$parcel_name)) %>%
+  group_by(group_label) %>%
+  summarise(xmin = min(pos) - 0.4, xmax = max(pos) + 0.4, .groups = "drop") %>%
+  mutate(group_label = factor(group_label,
+                               levels = c("Auditory", "Cognitive", "Affective")))
+
+## 3d. Individual parcel-name positions (directly under each bar pair) -----
+parcel_label_df <- parcel_order %>%
+  filter(parcel_name %in% unique(sig_long$parcel_name))
+
+## 3e. Fixed plot range, and all below-axis rows positioned off THAT range ---
+plot_ymin <- -2
+plot_ymax <- max(c(sig_long$mean + sig_long$se, star_df$y_star), na.rm = TRUE) * 1.05
+plot_range <- plot_ymax - plot_ymin
+
+parcel_label_y <- plot_ymin - 0.06 * plot_range   # parcel names, right under bars
+bracket_y      <- plot_ymin - 0.24 * plot_range   # bracket line, below parcel names
+tick_len       <- 0.03 * plot_range
+label_y        <- bracket_y - 0.06 * plot_range   # group label (Auditory/Cognitive/Affective)
+
+## 4. Single continuous panel, all text sized to 8pt
+FONT_PT <- 10
+
+p <- ggplot(sig_long, aes(x = as.numeric(parcel_name), y = mean, fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7),
+           width = 0.6) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                position = position_dodge(width = 0.7), width = 0.25) +
+  geom_text(data = star_df,
+            aes(x = as.numeric(parcel_name), y = y_star, label = stars),
+            inherit.aes = FALSE, vjust = 0, nudge_y = 0.05,
+            size = FONT_PT / .pt) +
+  geom_text(data = parcel_label_df,
+            aes(x = pos, y = parcel_label_y, label = parcel_name),
+            inherit.aes = FALSE, size = FONT_PT / .pt, angle = 45, hjust = 1, vjust = 1) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmax, y = bracket_y, yend = bracket_y),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmin, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmax, xend = xmax, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_text(data = bracket_df,
+            aes(x = (xmin + xmax) / 2, y = label_y, label = group_label),
+            inherit.aes = FALSE, fontface = "bold", size = FONT_PT / .pt, vjust = 1) +
+  scale_x_continuous(breaks = NULL) +
+  coord_cartesian(clip = "off", ylim = c(plot_ymin, plot_ymax)) +
+  scale_fill_manual(values = c("Native speakers" = "orange", "L2 learners" = "darkgreen")) +
+  labs(x = NULL, y = bquote(paste("Average "* italic(t) * " (real vs. pseudo)"))) +
+  theme_minimal(base_size = FONT_PT) +
+  theme(legend.position = "top",
+        plot.title = element_text(size = 14),
+        axis.title = element_text(size = 14),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 14),
+        plot.margin = margin(t = 10, r = 10, b = 70, l = 10))
+
+print(p)
+
+#ggsave("/Users/cx/Desktop/real_vs_fake_barplot_long.png", p,
+       #width = 12, height = 3, dpi = 300, limitsize = FALSE)
+```
+
+
+```{r}
+#use this fig3_1b,fig3_2b
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+df <- read.csv("/Users/cx/Desktop/dNEP/parcel_ttest_all_contrasts_smoothed10.csv",
+                stringsAsFactors = FALSE)
+
+parcel_info <- read.delim("/Users/cx/Desktop/dNEP/glasser_parcellation_information.tsv",
+                           stringsAsFactors = FALSE) %>%
+  rename(parcel_num = `Parcel.Number`) %>%   # read.delim mangles the space to a dot
+  select(parcel_num, parcel_name = parcel, section, section_num) %>%
+  mutate(section = gsub("_", " ", section))
+
+## 1. Get the 15 parcels significant in the overall real_vs_fake
+## contrast (this defines the region set / order), then pull their
+## VALUES from the real_vs_fake_in_positive contrast instead --
+## regardless of whether each one individually reaches significance
+## in the positive sub-contrast.
+sig_parcels_real_vs_fake <- df %>%
+  filter(contrast == "real_vs_fake",
+         significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  pull(parcel)
+
+sig_df <- df %>%
+  filter(contrast == "real_vs_fake_in_negative", # change here for pos/neg
+         parcel %in% sig_parcels_real_vs_fake) %>%
+  left_join(parcel_info, by = c("parcel" = "parcel_num"))
+
+## 2. Reshape means and SEs into long format ---------------------------
+sig_long <- sig_df %>%
+  dplyr::select(parcel_name, t_stat, native_mean, native_se, l2_mean, l2_se) %>%
+  pivot_longer(
+    cols = c(native_mean, native_se, l2_mean, l2_se),
+    names_to = c("Group", ".value"),
+    names_pattern = "(native|l2)_(mean|se)"
+  ) %>%
+  mutate(Group = recode(Group, native = "Native speakers", l2 = "L2 learners"),
+         Group = factor(Group, levels = c("Native speakers", "L2 learners")))
+
+
+## 3. Same three-way grouping and order as the real_vs_fake figure:
+##   auditory: A4, A5, STGa, STSdp, TA2
+##   control:  IFJa, IFJp, IFSa, IFSp, p9-46v, IP1, TPOJ1
+##   emotion:  55b, PI, FOP5
+parcel_order <- tribble(
+  ~parcel_name, ~group_label, ~pos,
+  "A4",         "Auditory",    1,
+  "A5",         "Auditory",    2,
+  "STGa",       "Auditory",    3,
+  "STSdp",      "Auditory",    4,
+  "TA2",        "Auditory",    5,
+  "PBelt",     "Auditory",    6,
+  #"44",        "Cognitive",    6,
+  "45",        "Cognitive",    7,
+  "IFJa",       "Cognitive",     8,
+  "IFJp",       "Cognitive",     9,
+  "IFSa",       "Cognitive",     10,
+  "IFSp",       "Cognitive",     11,
+  "p9-46v",     "Cognitive",    12,
+  "IP1",        "Cognitive",    13,
+  "TPOJ1",      "Cognitive",    14,
+  "55b",        "Affective",    15,
+  "PI",         "Affective",    16,
+  "FOP5",       "Affective",    17
+)
+
+sig_long <- sig_long %>%
+  left_join(parcel_order, by = "parcel_name") %>%
+  mutate(
+    group_label = factor(group_label,
+                          levels = c("Auditory", "Cognitive", "Affective")),
+    parcel_name = reorder(parcel_name, pos)
+  )
+
+## 3b. Significance stars for each parcel, based on this contrast's
+## own FDR-corrected significance (p_fdr / significant_fdr).
+## Coerce parcel_name to plain character on both sides before joining
+## -- a factor-vs-character mismatch here silently produces NA p_fdr
+## for every row, which is why stars can vanish even though the logic
+## "looks" right.
+star_lookup <- sig_df %>%
+  mutate(parcel_name = as.character(parcel_name),
+         p_fdr = as.numeric(p_fdr),
+         significant_fdr = significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  select(parcel_name, p_fdr, significant_fdr)
+
+star_df <- sig_long %>%
+  mutate(parcel_name_chr = as.character(parcel_name)) %>%
+  group_by(parcel_name, parcel_name_chr, group_label) %>%
+  summarise(y_star = max(mean + se, na.rm = TRUE), .groups = "drop") %>%
+  left_join(star_lookup, by = c("parcel_name_chr" = "parcel_name")) %>%
+  mutate(
+    stars = case_when(
+      !significant_fdr           ~ "",
+      is.na(p_fdr)                ~ "*",   # significant but p_fdr missing -> still mark it
+      p_fdr < 0.001                ~ "***",
+      p_fdr < 0.01                 ~ "**",
+      TRUE                         ~ "*"
+    )
+  ) %>%
+  filter(stars != "")
+
+## quick sanity check when running interactively -- should be >0 if
+## any parcels are significant in this contrast
+message("Parcels with stars: ", nrow(star_df), " / ", n_distinct(sig_long$parcel_name))
+
+## 3c. Bracket coordinates for the three sections (drawn below the
+## x-axis instead of relying on facet strips) -- since parcel_name is
+## ordered by `pos` and each group is a contiguous block, the bracket
+## span is just the min/max `pos` per group.
+bracket_df <- parcel_order %>%
+  filter(parcel_name %in% unique(sig_long$parcel_name)) %>%
+  group_by(group_label) %>%
+  summarise(xmin = min(pos) - 0.4, xmax = max(pos) + 0.4, .groups = "drop") %>%
+  mutate(group_label = factor(group_label,
+                               levels = c("Auditory", "Cognitive", "Affective")))
+
+## 3d. Individual parcel-name positions (directly under each bar pair) -----
+parcel_label_df <- parcel_order %>%
+  filter(parcel_name %in% unique(sig_long$parcel_name))
+
+## 3e. Fixed plot range, and all below-axis rows positioned off THAT range ---
+plot_ymin <- -2
+plot_ymax <- max(c(sig_long$mean + sig_long$se, star_df$y_star), na.rm = TRUE) * 1.05
+plot_range <- plot_ymax - plot_ymin
+
+parcel_label_y <- plot_ymin - 0.06 * plot_range   # parcel names, right under bars
+bracket_y      <- plot_ymin - 0.24 * plot_range   # bracket line, below parcel names
+tick_len       <- 0.03 * plot_range
+label_y        <- bracket_y - 0.06 * plot_range   # group label (Auditory/Cognitive/Emotion)
+
+## 4. Single continuous panel, all text sized to 8pt
+FONT_PT <- 10
+
+p <- ggplot(sig_long, aes(x = as.numeric(parcel_name), y = mean, fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7),
+           width = 0.6) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                position = position_dodge(width = 0.7), width = 0.25) +
+  geom_text(data = star_df,
+            aes(x = as.numeric(parcel_name), y = y_star, label = stars),
+            inherit.aes = FALSE, vjust = 0, nudge_y = 0.05,
+            size = FONT_PT / .pt) +
+  geom_text(data = parcel_label_df,
+            aes(x = pos, y = parcel_label_y, label = parcel_name),
+            inherit.aes = FALSE, size = FONT_PT / .pt, angle = 45, hjust = 1, vjust = 1) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmax, y = bracket_y, yend = bracket_y),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmin, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmax, xend = xmax, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_text(data = bracket_df,
+            aes(x = (xmin + xmax) / 2, y = label_y, label = group_label),
+            inherit.aes = FALSE, fontface = "bold", size = FONT_PT / .pt, vjust = 1) +
+  scale_x_continuous(breaks = NULL) +
+  coord_cartesian(clip = "off", ylim = c(plot_ymin, plot_ymax)) +
+  scale_fill_manual(values = c("Native speakers" = "orange", "L2 learners" = "darkgreen")) +
+  labs(x = NULL, y = bquote(paste("Average "* italic(t) * " (real vs. pseudo)"))) +
+  theme_minimal(base_size = FONT_PT) +
+  theme(legend.position = "none", #change here to top/none
+        plot.title = element_text(size = 14),
+        axis.title = element_text(size = 14),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 14),
+        plot.margin = margin(t = 10, r = 10, b = 70, l = 10))
+
+print(p)
+
+#ggsave("/Users/cx/Desktop/real_vs_fake_barplot_long.png", p,
+       #width = 12, height = 3, dpi = 300, limitsize = FALSE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+df <- read.csv(
+  "/Users/cx/Desktop/dNEP/parcel_ttest_all_contrasts_smoothed10.csv",
+  stringsAsFactors = FALSE
+)
+
+parcel_info <- read.delim(
+  "/Users/cx/Desktop/dNEP/glasser_parcellation_information.tsv",
+  stringsAsFactors = FALSE
+) %>%
+  rename(parcel_num = `Parcel.Number`) %>%
+  select(
+    parcel_num,
+    parcel_name = parcel,
+    section,
+    section_num
+  ) %>%
+  mutate(
+    section = gsub("_", " ", section),
+    section = ifelse(
+      section == "Emotion",
+      "Affective",
+      section
+    )
+  )
+
+df_named <- df %>%
+  left_join(
+    parcel_info,
+    by = c("parcel" = "parcel_num")
+  )
+
+
+## ============================================================
+## Fixed order of the 17 regions
+## ============================================================
+
+parcel_order <- tribble(
+  ~parcel_name, ~group_label, ~pos,
+
+  "A4",         "Auditory",     1,
+  "A5",         "Auditory",     2,
+  "STGa",       "Auditory",     3,
+  "STSdp",      "Auditory",     4,
+  "TA2",        "Auditory",     5,
+  "PBelt",      "Auditory",     6,
+
+  "45",         "Cognitive",    7,
+  "IFJa",       "Cognitive",    8,
+  "IFJp",       "Cognitive",    9,
+  "IFSa",       "Cognitive",   10,
+  "IFSp",       "Cognitive",   11,
+  "p9-46v",     "Cognitive",   12,
+  "IP1",        "Cognitive",   13,
+  "TPOJ1",      "Cognitive",   14,
+
+  "55b",        "Affective",   15,
+  "PI",         "Affective",   16,
+  "FOP5",       "Affective",   17
+) %>%
+  arrange(pos) %>%
+  mutate(
+    group_label = factor(
+      group_label,
+      levels = c(
+        "Auditory",
+        "Cognitive",
+        "Affective"
+      )
+    )
+  )
+
+
+## Optional checks to make sure that positions and names are unique
+stopifnot(
+  nrow(parcel_order) == 17,
+  anyDuplicated(parcel_order$parcel_name) == 0,
+  anyDuplicated(parcel_order$pos) == 0
+)
+
+
+## ============================================================
+## Identify significant regions for diagnostic messages
+## These results do not change the fixed plotting order.
+## ============================================================
+
+is_true <- function(x) {
+  toupper(trimws(as.character(x))) == "TRUE"
+}
+
+sig_real <- df_named %>%
+  filter(
+    contrast == "real_vs_rest",
+    is_true(significant_fdr)
+  ) %>%
+  distinct(parcel_name) %>%
+  pull(parcel_name)
+
+sig_fake <- df_named %>%
+  filter(
+    contrast == "fake_vs_rest",
+    is_true(significant_fdr)
+  ) %>%
+  distinct(parcel_name) %>%
+  pull(parcel_name)
+
+union_parcels <- union(sig_real, sig_fake)
+
+message(
+  "Using the fixed 17-region plotting order.",
+  "\nSignificant fixed regions in real_vs_rest: ",
+  length(intersect(parcel_order$parcel_name, sig_real)),
+  "\nSignificant fixed regions in fake_vs_rest: ",
+  length(intersect(parcel_order$parcel_name, sig_fake)),
+  "\nSignificant fixed regions in either contrast: ",
+  length(intersect(parcel_order$parcel_name, union_parcels))
+)
+
+extra_significant <- setdiff(
+  union_parcels,
+  parcel_order$parcel_name
+)
+
+if (length(extra_significant) > 0) {
+  message(
+    "Significant parcels not included in the fixed 17-region plot: ",
+    paste(extra_significant, collapse = ", ")
+  )
+}
+
+
+## ============================================================
+## Shared y-axis limits across the two contrasts
+## ============================================================
+
+shared_data <- df_named %>%
+  filter(
+    contrast %in% c(
+      "real_vs_rest",
+      "fake_vs_rest"
+    ),
+    parcel_name %in% parcel_order$parcel_name
+  ) %>%
+  pivot_longer(
+    cols = c(
+      native_mean,
+      native_se,
+      l2_mean,
+      l2_se
+    ),
+    names_to = c("Group", ".value"),
+    names_pattern = "(native|l2)_(mean|se)"
+  )
+
+plot_ymin_shared <- -4
+
+plot_ymax_shared <- max(
+  shared_data$mean + shared_data$se,
+  na.rm = TRUE
+) * 1.05
+
+FONT_PT <- 10
+
+
+## ============================================================
+## Plotting function
+## ============================================================
+
+make_roi_plot <- function(
+    contrast_name,
+    y_label,
+    out_path
+) {
+
+  plot_df <- df_named %>%
+    filter(
+      contrast == contrast_name,
+      parcel_name %in% parcel_order$parcel_name
+    )
+
+  missing_parcels <- setdiff(
+    parcel_order$parcel_name,
+    unique(plot_df$parcel_name)
+  )
+
+  if (length(missing_parcels) > 0) {
+    message(
+      contrast_name,
+      ": no data found for ",
+      paste(missing_parcels, collapse = ", ")
+    )
+  }
+
+
+  ## Convert native and L2 values to long format
+  plot_long <- plot_df %>%
+    select(
+      parcel_name,
+      t_stat,
+      p_fdr,
+      significant_fdr,
+      native_mean,
+      native_se,
+      l2_mean,
+      l2_se
+    ) %>%
+    pivot_longer(
+      cols = c(
+        native_mean,
+        native_se,
+        l2_mean,
+        l2_se
+      ),
+      names_to = c("Group", ".value"),
+      names_pattern = "(native|l2)_(mean|se)"
+    ) %>%
+    mutate(
+      Group = recode(
+        Group,
+        native = "Native speakers",
+        l2 = "L2 learners"
+      ),
+      Group = factor(
+        Group,
+        levels = c(
+          "Native speakers",
+          "L2 learners"
+        )
+      )
+    ) %>%
+    left_join(
+      parcel_order,
+      by = "parcel_name"
+    ) %>%
+    arrange(pos, Group) %>%
+    mutate(
+      parcel_name = factor(
+        parcel_name,
+        levels = parcel_order$parcel_name
+      )
+    )
+
+
+  ## Labels for all 17 fixed parcels
+  parcel_label_df <- parcel_order
+
+
+  ## Significance information
+  star_lookup <- plot_df %>%
+    transmute(
+      parcel_name = as.character(parcel_name),
+      p_fdr = as.numeric(p_fdr),
+      significant_fdr = is_true(significant_fdr)
+    ) %>%
+    distinct(
+      parcel_name,
+      .keep_all = TRUE
+    )
+
+
+  ## Place each significance marker above the higher bar/error bar
+  star_df <- plot_long %>%
+    mutate(
+      parcel_name_chr = as.character(parcel_name)
+    ) %>%
+    group_by(
+      parcel_name,
+      parcel_name_chr,
+      group_label,
+      pos
+    ) %>%
+    summarise(
+      y_star = max(
+        mean + se,
+        na.rm = TRUE
+      ),
+      .groups = "drop"
+    ) %>%
+    left_join(
+      star_lookup,
+      by = c(
+        "parcel_name_chr" = "parcel_name"
+      )
+    ) %>%
+    mutate(
+      stars = case_when(
+        is.na(significant_fdr) ~ "",
+        !significant_fdr       ~ "",
+        is.na(p_fdr)           ~ "*",
+        p_fdr < 0.001          ~ "***",
+        p_fdr < 0.01           ~ "**",
+        TRUE                   ~ "*"
+      )
+    ) %>%
+    filter(stars != "")
+
+
+  message(
+    contrast_name,
+    ": ",
+    nrow(star_df),
+    " / ",
+    n_distinct(plot_long$parcel_name),
+    " regions significant"
+  )
+
+
+  ## ==========================================================
+  ## Brackets based directly on the fixed region order
+  ##
+  ## Auditory:  1–6
+  ## Cognitive: 7–14
+  ## Affective: 15–17
+  ## ==========================================================
+
+  bracket_df <- parcel_order %>%
+    group_by(group_label) %>%
+    summarise(
+      xmin = min(pos) - 0.4,
+      xmax = max(pos) + 0.4,
+      .groups = "drop"
+    )
+
+
+  plot_ymin  <- plot_ymin_shared
+  plot_ymax  <- plot_ymax_shared
+  plot_range <- plot_ymax - plot_ymin
+
+  parcel_label_y <- plot_ymin - 0.06 * plot_range
+  bracket_y      <- plot_ymin - 0.24 * plot_range
+  tick_len       <- 0.03 * plot_range
+  label_y        <- bracket_y - 0.06 * plot_range
+
+
+  p <- ggplot(
+    plot_long,
+    aes(
+      x = pos,
+      y = mean,
+      fill = Group
+    )
+  ) +
+
+    geom_bar(
+      stat = "identity",
+      position = position_dodge(width = 0.7),
+      width = 0.6
+    ) +
+
+    geom_errorbar(
+      aes(
+        ymin = mean - se,
+        ymax = mean + se
+      ),
+      position = position_dodge(width = 0.7),
+      width = 0.25
+    ) +
+
+    geom_text(
+      data = star_df,
+      aes(
+        x = pos,
+        y = y_star,
+        label = stars
+      ),
+      inherit.aes = FALSE,
+      vjust = 0,
+      nudge_y = 0.05,
+      size = FONT_PT / .pt
+    ) +
+
+    ## Region names
+    geom_text(
+      data = parcel_label_df,
+      aes(
+        x = pos,
+        y = parcel_label_y,
+        label = parcel_name
+      ),
+      inherit.aes = FALSE,
+      size = FONT_PT / .pt,
+      angle = 45,
+      hjust = 1,
+      vjust = 1
+    ) +
+
+    ## Horizontal bracket lines
+    geom_segment(
+      data = bracket_df,
+      aes(
+        x = xmin,
+        xend = xmax,
+        y = bracket_y,
+        yend = bracket_y
+      ),
+      inherit.aes = FALSE,
+      linewidth = 0.4
+    ) +
+
+    ## Left ends of brackets
+    geom_segment(
+      data = bracket_df,
+      aes(
+        x = xmin,
+        xend = xmin,
+        y = bracket_y,
+        yend = bracket_y + tick_len
+      ),
+      inherit.aes = FALSE,
+      linewidth = 0.4
+    ) +
+
+    ## Right ends of brackets
+    geom_segment(
+      data = bracket_df,
+      aes(
+        x = xmax,
+        xend = xmax,
+        y = bracket_y,
+        yend = bracket_y + tick_len
+      ),
+      inherit.aes = FALSE,
+      linewidth = 0.4
+    ) +
+
+    ## Group labels
+    geom_text(
+      data = bracket_df,
+      aes(
+        x = (xmin + xmax) / 2,
+        y = label_y,
+        label = group_label
+      ),
+      inherit.aes = FALSE,
+      fontface = "bold",
+      size = FONT_PT / .pt,
+      vjust = 1
+    ) +
+
+    scale_x_continuous(
+      breaks = NULL,
+      limits = c(0.5, 17.5),
+      expand = expansion(mult = 0)
+    ) +
+
+    coord_cartesian(
+      clip = "off",
+      ylim = c(
+        plot_ymin,
+        plot_ymax
+      )
+    ) +
+
+    scale_fill_manual(
+      values = c(
+        "Native speakers" = "orange",
+        "L2 learners" = "darkgreen"
+      )
+    ) +
+
+    labs(
+      x = NULL,
+      y = y_label
+    ) +
+
+    theme_minimal(
+      base_size = FONT_PT
+    ) +
+
+    theme(
+      legend.position = "top",
+
+      plot.title = element_text(
+        size = 14
+      ),
+
+      axis.title = element_text(
+        size = 14
+      ),
+
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+
+      axis.text.y = element_text(
+        size = 14
+      ),
+
+      plot.margin = margin(
+        t = 10,
+        r = 10,
+        b = 70,
+        l = 10
+      )
+    )
+
+
+  print(p)
+
+  ggsave(
+    filename = out_path,
+    plot = p,
+    width = 14,
+    height = 3,
+    dpi = 300,
+    limitsize = FALSE
+  )
+
+  invisible(p)
+}
+
+
+## ============================================================
+## Create plots
+## ============================================================
+
+p_real <- make_roi_plot(
+  contrast_name = "real_vs_rest",
+  y_label = bquote(
+    paste(
+      "Average " * italic(t) * " (real words)"
+    )
+  ),
+  out_path = "/Users/cx/Desktop/real_vs_rest_barplot_long.png"
+)
+
+
+p_fake <- make_roi_plot(
+  contrast_name = "fake_vs_rest",
+  y_label = bquote(
+    paste(
+      "Average " * italic(t) * " (pseudo words)"
+    )
+  ),
+  out_path = "/Users/cx/Desktop/fake_vs_rest_barplot_long.png"
+)
+```
+
+
+```{r}
+#fig 4bs
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+df <- read.csv("/Users/cx/Desktop/dNEP/parcel_ttest_all_contrasts_smoothed10.csv",
+                stringsAsFactors = FALSE)
+
+parcel_info <- read.delim("/Users/cx/Desktop/dNEP/glasser_parcellation_information.tsv",
+                           stringsAsFactors = FALSE) %>%
+  rename(parcel_num = `Parcel.Number`) %>%
+  select(parcel_num, parcel_name = parcel, section, section_num) %>%
+  mutate(section = gsub("_", " ", section),
+         section = ifelse(section == "Emotion", "Affective", section))
+
+df_named <- df %>% left_join(parcel_info, by = c("parcel" = "parcel_num"))
+
+## ---- Original 17-region -> group_label assignment (labels only) ----
+## ---- Original 17-region map with the requested fixed order ----
+old_group_map <- tribble(
+  ~parcel_name, ~group_label,
+  "A4",         "Auditory",
+  "A5",         "Auditory",
+  "STGa",       "Auditory",
+  "STSdp",      "Auditory",
+  "TA2",        "Auditory",
+  "PBelt",      "Auditory",
+  "45",         "Cognitive",
+  "IFJa",       "Cognitive",
+  "IFJp",       "Cognitive",
+  "IFSa",       "Cognitive",
+  "IFSp",       "Cognitive",
+  "p9-46v",     "Cognitive",
+  "IP1",        "Cognitive",
+  "TPOJ1",      "Cognitive",
+  "55b",        "Affective",
+  "PI",         "Affective",
+  "FOP5",       "Affective"
+)
+
+## ---- Union region set: significant in EITHER contrast ----
+sig_real <- df_named %>%
+  filter(contrast == "real_vs_rest", significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  pull(parcel_name)
+
+sig_fake <- df_named %>%
+  filter(contrast == "fake_vs_rest", significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  pull(parcel_name)
+
+union_parcels <- union(sig_real, sig_fake)
+
+message("Total regions in union: ", length(union_parcels),
+        " (real: ", length(sig_real), ", fake: ", length(sig_fake),
+        ", overlap: ", length(intersect(sig_real, sig_fake)), ")")
+
+## ---- Assign group_label: fixed 17-region map first, fallback to atlas section ----
+parcel_order <- tibble(parcel_name = union_parcels) %>%
+  left_join(old_group_map, by = "parcel_name") %>%
+  left_join(parcel_info %>% distinct(parcel_name, section, section_num),
+            by = "parcel_name") %>%
+  mutate(
+    group_label = ifelse(is.na(group_label), section, group_label),
+    group_label = factor(group_label, levels = c("Auditory", "Cognitive", "Affective"))
+  ) %>%
+  arrange(group_label, section_num, parcel_name) %>%
+  mutate(pos = row_number()) %>%
+  select(parcel_name, group_label, pos)
+
+new_parcels <- setdiff(union_parcels, old_group_map$parcel_name)
+if (length(new_parcels) > 0) {
+  message("Parcels newly added beyond the original 17 (grouped by atlas section): ",
+          paste(new_parcels, collapse = ", "))
+}
+
+dropped_old <- setdiff(old_group_map$parcel_name, union_parcels)
+if (length(dropped_old) > 0) {
+  message("Old-17 regions dropped (not significant in either contrast): ",
+          paste(dropped_old, collapse = ", "))
+}
+
+## ---- Shared y-axis limits across both contrasts ----
+shared_data <- df_named %>%
+  filter(contrast %in% c("real_vs_rest", "fake_vs_rest"),
+         parcel_name %in% parcel_order$parcel_name) %>%
+  pivot_longer(cols = c(native_mean, native_se, l2_mean, l2_se),
+               names_to = c("Group", ".value"),
+               names_pattern = "(native|l2)_(mean|se)")
+
+plot_ymin_shared <- -4
+plot_ymax_shared <- max(shared_data$mean + shared_data$se, na.rm = TRUE) * 1.05
+
+FONT_PT <- 10
+
+make_roi_plot <- function(contrast_name, y_label, out_path) {
+
+  sig_df <- df_named %>%
+    filter(contrast == contrast_name,
+           parcel_name %in% parcel_order$parcel_name)
+
+  sig_long <- sig_df %>%
+    select(parcel_name, t_stat, p_fdr, significant_fdr,
+           native_mean, native_se, l2_mean, l2_se) %>%
+    pivot_longer(
+      cols = c(native_mean, native_se, l2_mean, l2_se),
+      names_to = c("Group", ".value"),
+      names_pattern = "(native|l2)_(mean|se)"
+    ) %>%
+    mutate(Group = recode(Group, native = "Native speakers", l2 = "L2 learners"),
+           Group = factor(Group, levels = c("Native speakers", "L2 learners"))) %>%
+    left_join(parcel_order, by = "parcel_name") %>%
+    mutate(parcel_name = factor(parcel_name, levels = parcel_order$parcel_name))
+
+  parcel_label_df <- parcel_order
+
+  star_lookup <- sig_df %>%
+    mutate(parcel_name = as.character(parcel_name),
+           p_fdr = as.numeric(p_fdr),
+           significant_fdr = significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+    select(parcel_name, p_fdr, significant_fdr)
+
+  star_df <- sig_long %>%
+    mutate(parcel_name_chr = as.character(parcel_name)) %>%
+    group_by(parcel_name, parcel_name_chr, group_label, pos) %>%
+    summarise(y_star = max(mean + se, na.rm = TRUE), .groups = "drop") %>%
+    left_join(star_lookup, by = c("parcel_name_chr" = "parcel_name")) %>%
+    mutate(
+      stars = case_when(
+        !significant_fdr ~ "",
+        is.na(p_fdr)      ~ "*",
+        p_fdr < 0.001     ~ "***",
+        p_fdr < 0.01      ~ "**",
+        TRUE              ~ "*"
+      )
+    ) %>%
+    filter(stars != "")
+
+  message(contrast_name, ": ", nrow(star_df), " / ", n_distinct(sig_long$parcel_name),
+          " regions significant")
+
+  ## Brackets only for parcels in the original 17-region map
+  bracket_df <- parcel_order %>%
+    filter(parcel_name %in% old_group_map$parcel_name) %>%
+    group_by(group_label) %>%
+    summarise(xmin = min(pos) - 0.4, xmax = max(pos) + 0.4, .groups = "drop")
+
+  plot_ymin <- plot_ymin_shared
+  plot_ymax <- plot_ymax_shared
+  plot_range <- plot_ymax - plot_ymin
+
+  parcel_label_y <- plot_ymin - 0.06 * plot_range
+  bracket_y      <- plot_ymin - 0.24 * plot_range
+  tick_len       <- 0.03 * plot_range
+  label_y        <- bracket_y - 0.06 * plot_range
+
+  p <- ggplot(sig_long, aes(x = pos, y = mean, fill = Group)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.6) +
+    geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                  position = position_dodge(width = 0.7), width = 0.25) +
+    geom_text(data = star_df,
+              aes(x = pos, y = y_star, label = stars),
+              inherit.aes = FALSE, vjust = 0, nudge_y = 0.05,
+              size = FONT_PT / .pt) +
+    geom_text(data = parcel_label_df,
+              aes(x = pos, y = parcel_label_y, label = parcel_name),
+              inherit.aes = FALSE, size = FONT_PT / .pt, angle = 60, hjust = 0.5, vjust = 0.5) +
+    geom_segment(data = bracket_df,
+                 aes(x = xmin, xend = xmax, y = bracket_y, yend = bracket_y),
+                 inherit.aes = FALSE, linewidth = 0.4) +
+    geom_segment(data = bracket_df,
+                 aes(x = xmin, xend = xmin, y = bracket_y, yend = bracket_y + tick_len),
+                 inherit.aes = FALSE, linewidth = 0.4) +
+    geom_segment(data = bracket_df,
+                 aes(x = xmax, xend = xmax, y = bracket_y, yend = bracket_y + tick_len),
+                 inherit.aes = FALSE, linewidth = 0.4) +
+    geom_text(data = bracket_df,
+              aes(x = (xmin + xmax) / 2, y = label_y, label = group_label),
+              inherit.aes = FALSE, fontface = "bold", size = FONT_PT / .pt, vjust = 0.5) +
+    scale_x_continuous(breaks = NULL) +
+    coord_cartesian(clip = "off", ylim = c(plot_ymin, plot_ymax)) +
+    scale_fill_manual(values = c("Native speakers" = "orange", "L2 learners" = "darkgreen")) +
+    labs(x = NULL, y = y_label) +
+    theme_minimal(base_size = FONT_PT) +
+    theme(legend.position = "top",
+          plot.title = element_text(size = 14),
+          axis.title = element_text(size = 14),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.text.y = element_text(size = 14),
+          plot.margin = margin(t = 10, r = 10, b = 70, l = 10))
+
+  print(p)
+  #ggsave(out_path, p, width = 14, height = 3, dpi = 300, limitsize = FALSE)
+  invisible(p)
+}
+
+p_real <- make_roi_plot(
+  contrast_name = "real_vs_rest",
+  y_label = bquote(paste("Average "* italic(t) * " (real words)")),
+  out_path = "/Users/cx/Desktop/real_vs_rest_barplot_long.png"
+)
+
+p_fake <- make_roi_plot(
+  contrast_name = "fake_vs_rest",
+  y_label = bquote(paste("Average "* italic(t) * " (pseudo words)")),
+  out_path = "/Users/cx/Desktop/fake_vs_rest_barplot_long.png"
+)
+```
+
+
+
+
+
+
+```{r}
+#fig5
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+df <- read.csv("/Users/cx/Desktop/dNEP/parcel_anova_all_contrasts_smoothed10.csv",
+                stringsAsFactors = FALSE)
+
+parcel_info <- read.delim("/Users/cx/Desktop/dNEP/glasser_parcellation_information.tsv",
+                           stringsAsFactors = FALSE) %>%
+  rename(parcel_num = `Parcel.Number`) %>%   # read.delim mangles the space to a dot
+  select(parcel_num, parcel_name = parcel, section, section_num) %>%
+  mutate(section = gsub("_", " ", section))
+
+## 1. Keep only significant real_vs_rest parcels, attach parcel name/section
+sig_df <- df %>%
+  filter(contrast == "real_vs_rest",
+         significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  left_join(parcel_info, by = c("parcel" = "parcel_num"))
+
+## 2. Reshape means and SEs into long format (three groups instead of two) ---
+sig_long <- sig_df %>%
+  select(parcel_name, section, section_num, f_stat,
+         native_mean, native_se, l2_high_mean, l2_high_se,
+         l2_low_mean, l2_low_se) %>%
+  pivot_longer(
+    cols = c(native_mean, native_se, l2_high_mean, l2_high_se,
+             l2_low_mean, l2_low_se),
+    names_to = c("Group", ".value"),
+    names_pattern = "(native|l2_high|l2_low)_(mean|se)"
+  ) %>%
+  mutate(Group = recode(Group,
+                         native = "Native speakers",
+                         l2_high = "Higher proficiency learners",
+                         l2_low = "Lower proficiency learners"),
+         Group = factor(Group, levels = c("Native speakers", "Higher proficiency learners", "Lower proficiency learners")))
+
+## 3. Order: parcels overlapping with the real_vs_fake set come FIRST,
+## labeled with their original Auditory/Cognitive/Emotion group;
+## any new parcels come last, unlabeled.
+## NOTE: adjust this list if the significant parcel set for real_vs_rest
+## differs from what you used previously -- only entries whose parcel_name
+## actually appears in sig_long will be used.
+overlap_order <- tribble(
+  ~parcel_name, ~group_label, ~overlap_pos,
+  "IFJa",       "Cognitive",     1,
+  "IFJp",       "Cognitive",     2,
+  "IFSa",       "Cognitive",     3,
+  "IFSp",       "Cognitive",     4,
+  "p9-46v",     "Cognitive",     5,
+  "IP1",        "Cognitive",     6,
+  "55b",        "Affective",     7
+)
+
+sig_long <- sig_long %>%
+  left_join(overlap_order, by = "parcel_name") %>%
+  mutate(is_overlap = !is.na(group_label)) %>%
+  arrange(desc(is_overlap), overlap_pos, section_num, desc(abs(f_stat))) %>%
+  mutate(parcel_name = factor(parcel_name, levels = unique(parcel_name)),
+         group_label = factor(group_label, levels = c("Cognitive", "Affective")))
+
+parcel_pos <- tibble(parcel_name = levels(sig_long$parcel_name),
+                      pos = seq_along(levels(sig_long$parcel_name)))
+
+sig_long <- sig_long %>% left_join(parcel_pos, by = "parcel_name")
+
+## 3a. Individual parcel-name positions (directly under each bar triple,
+## for ALL parcels, including the unlabeled non-overlap ones) --------
+parcel_label_df <- parcel_pos
+
+## 3b. Significance stars, based on this contrast's own p_fdr/significant_fdr
+## (one star set per parcel -- the ANOVA test is a single omnibus test
+## across the three groups, not per-group, so stars mark the parcel as a
+## whole rather than any specific bar)
+star_lookup <- sig_df %>%
+  mutate(parcel_name = as.character(parcel_name),
+         p_fdr = as.numeric(p_fdr),
+         significant_fdr = significant_fdr %in% c(TRUE, "True", "TRUE")) %>%
+  select(parcel_name, p_fdr, significant_fdr)
+
+star_df <- sig_long %>%
+  mutate(parcel_name_chr = as.character(parcel_name)) %>%
+  group_by(parcel_name, parcel_name_chr, group_label, pos) %>%
+  summarise(y_star = max(mean + se, na.rm = TRUE), .groups = "drop") %>%
+  left_join(star_lookup, by = c("parcel_name_chr" = "parcel_name")) %>%
+  mutate(
+    stars = case_when(
+      !significant_fdr ~ "",
+      is.na(p_fdr)      ~ "*",
+      p_fdr < 0.001     ~ "***",
+      p_fdr < 0.01      ~ "**",
+      TRUE              ~ "*"
+    )
+  ) %>%
+  filter(stars != "")
+
+message("Parcels with stars: ", nrow(star_df), " / ", n_distinct(sig_long$parcel_name))
+
+## 3c. Bracket coordinates -- only for the labeled (overlap) block
+bracket_df <- sig_long %>%
+  filter(!is.na(group_label)) %>%
+  distinct(parcel_name, group_label, pos) %>%
+  group_by(group_label) %>%
+  summarise(xmin = min(pos) - 0.4, xmax = max(pos) + 0.4, .groups = "drop")
+
+## 3d. Fixed plot range, and all below-axis rows positioned off THAT range ---
+plot_ymin <- -4
+plot_ymax <- max(c(sig_long$mean + sig_long$se, star_df$y_star), na.rm = TRUE) * 1.05
+plot_range <- plot_ymax - plot_ymin
+
+parcel_label_y <- plot_ymin - 0.06 * plot_range   # parcel names, right under bars
+bracket_y      <- plot_ymin - 0.24 * plot_range   # bracket line, below parcel names
+tick_len       <- 0.03 * plot_range
+label_y        <- bracket_y - 0.06 * plot_range   # group label (Cognitive/Emotion)
+
+## 4. Single continuous panel with brackets + stars ----------------------
+FONT_PT <- 10
+
+p <- ggplot(sig_long, aes(x = pos, y = mean, fill = Group)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8),
+           width = 0.7) +
+  geom_errorbar(aes(ymin = mean - se, ymax = mean + se),
+                position = position_dodge(width = 0.8), width = 0.25) +
+  geom_text(data = star_df,
+            aes(x = pos, y = y_star, label = stars),
+            inherit.aes = FALSE, vjust = 0, nudge_y = 0.05,
+            size = FONT_PT / .pt) +
+  geom_text(data = parcel_label_df,
+            aes(x = pos, y = parcel_label_y, label = parcel_name),
+            inherit.aes = FALSE, size = FONT_PT / .pt, angle = 45, hjust = 1, vjust = 1) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmax, y = bracket_y, yend = bracket_y),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmin, xend = xmin, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_segment(data = bracket_df,
+               aes(x = xmax, xend = xmax, y = bracket_y, yend = bracket_y + tick_len),
+               inherit.aes = FALSE, linewidth = 0.4) +
+  geom_text(data = bracket_df,
+            aes(x = (xmin + xmax) / 2, y = label_y, label = group_label),
+            inherit.aes = FALSE, fontface = "bold", size = FONT_PT / .pt, vjust = 1) +
+  scale_x_continuous(breaks = NULL) +
+  coord_cartesian(clip = "off", ylim = c(plot_ymin, plot_ymax)) +
+  scale_fill_manual(values = c("Native speakers" = "orange", "Higher proficiency learners" = "darkgreen", "Lower proficiency learners" = "#0064004c")) +
+  labs(x = NULL, y = bquote(paste("Average "* italic(t) * " (real words)"))) +
+  theme_minimal(base_size = FONT_PT) +
+  theme(legend.position = "top",
+        plot.title = element_text(size = 14),
+        axis.title = element_text(size = 14),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 14),
+        plot.margin = margin(t = 10, r = 10, b = 70, l = 10))
+
+print(p)
+
+ggsave("/Users/cx/Desktop/real_vs_rest_3groups_barplot.png", p,
+       width = 14, height = 3, dpi = 300, limitsize = FALSE)
+```
+
+
+
