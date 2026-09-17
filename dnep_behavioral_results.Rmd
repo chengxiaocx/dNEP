@@ -1,0 +1,158 @@
+
+```{r}
+rm(list=ls())
+
+source("/Users/cx/Desktop/EP/2meaning/data/summarySE.R")
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(report)
+library(see)
+library(parameters)
+library(performance)
+library(car)
+library(lme4)
+library(lmerTest)
+library(lsmeans)
+library(emmeans)
+library(Rmisc)
+library(lsr)
+library(multcomp)
+library(caret)
+```
+
+
+```{r}
+
+nep<-read.table('/Users/cx/Desktop/NEP/results/behavioral_results/eprime_beh/NEP_beh_results_re.csv',header=TRUE, sep=',')
+
+tapply(nep$slideRate.ACC,nep$Stimuli,mean)
+tapply(nep$slideRate.ACC,nep$Stimuli,sd)
+
+
+nep_L2 <- subset(nep,Group=='learner')
+nep_L1 <- subset(nep,Group=='native')
+
+
+
+tapply(nep_L1$slideRate.ACC,nep_L1$Stimuli,mean)
+tapply(nep_L1$slideRate.ACC,nep_L1$Stimuli,sd)
+
+tapply(nep_L2$slideRate.ACC,nep_L2$Stimuli,mean)
+tapply(nep_L2$slideRate.ACC,nep_L2$Stimuli,sd)
+
+##clean for RT
+clean_nep <- nep[nep$slideRate.ACC != 0, ] 
+clean_nep <- clean_nep[clean_nep$slideRate.RT > 200, ]
+clean_nep <- na.omit(clean_nep)
+
+# Per-subject RT outlier removal (>3 SD from subject's mean RT)
+remove_outliers <- function(df, sd_threshold = 3) {
+  result <- data.frame()
+  subjects <- unique(df$Subject)
+  for (subject in subjects) {
+    subset_df <- df[df$Subject == subject, ]
+    mean_rt <- mean(subset_df$slideRate.RT)
+    sd_rt <- sd(subset_df$slideRate.RT)
+    subset_df <- subset_df[abs(subset_df$slideRate.RT - mean_rt) <= sd_threshold * sd_rt, ]
+    result <- rbind(result, subset_df)
+  }
+  return(result)
+}
+
+clean_nep <- remove_outliers(clean_nep)
+
+
+tapply(clean_nep$slideRate.RT,clean_nep$Stimuli,mean)
+tapply(clean_nep$slideRate.RT,clean_nep$Stimuli,sd)
+
+
+```
+
+
+```{r}
+#fig1
+nep_acc <- summarySE(data = nep, measurevar = "slideRate.ACC", groupvars = c("Group", "Stimuli"))
+nep_rt <- summarySE(data = clean_nep, measurevar = "slideRate.RT", groupvars = c("Group", "Stimuli"), na.rm = TRUE)
+
+
+
+# Reorder Group factor: native first, learner second
+nep_acc$Group <- factor(nep_acc$Group, levels = c("native", "learner"))
+nep_rt$Group <- factor(nep_rt$Group, levels = c("native", "learner"))
+
+ggplot(nep_acc, aes(x = Stimuli, y = slideRate.ACC, fill = Group)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(0.9)) +
+  geom_errorbar(width = 0.15, position = position_dodge(0.9), 
+                aes(ymin = slideRate.ACC - ci, ymax = slideRate.ACC + ci)) +
+  scale_y_continuous("Mean Accuracy", expand = expansion(mult = c(0, 0.2)))+
+  xlab("Lexicality") +
+  scale_x_discrete(labels = c("real" = "Real-word stimuli", "pseudo" = "Pseudo-word stimuli")) +
+  scale_fill_manual(
+    values = c("native" = "orange", "learner" = "darkgreen"),
+    labels = c("native" = "Native speakers", "learner" = "L2 learners"),
+    name = "Group"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10)
+  )
+
+ggplot(nep_rt, aes(x = Stimuli, y = slideRate.RT, fill = Group)) +
+  geom_bar(stat = "identity", width = 0.8, position = position_dodge(0.9)) +
+  geom_errorbar(width = 0.15, position = position_dodge(0.9), 
+                aes(ymin = slideRate.RT - ci, ymax = slideRate.RT + ci)) +
+  scale_y_continuous("Mean Reaction Time", expand = expansion(mult = c(0, 0.2))) +
+  xlab("Lexicality") +
+  scale_x_discrete(labels = c("real" = "Real-word stimuli", "pseudo" = "Pseudo-word stimuli")) +
+  scale_fill_manual(
+    values = c("native" = "orange", "learner" = "darkgreen"),
+    labels = c("native" = "Native speakers", "learner" = "L2 learners"),
+    name = "Group"
+  ) +
+  theme(
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    legend.title = element_text(size = 10)
+  )
+
+```
+
+```{r}
+
+M0 <- glmer(data=nep, formula =slideRate.ACC~Group*Stimuli+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M0)
+
+m0 <- lmer(data=clean_nep, formula =slideRate.RT~Group*Stimuli+(1|Subject))
+summary(m0)
+
+```
+
+
+```{r}
+nep_real<- subset(nep, Stimuli == "real")
+M1 <- glmer(data=nep_real, formula =slideRate.ACC~Group+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M1)
+
+
+
+nep_pseudo<- subset(nep, Stimuli == "pseudo")
+M2 <- glmer(data=nep_pseudo, formula =slideRate.ACC~Group+(1|Subject),family = binomial, control = glmerControl(optimizer = 'bobyqa'))
+summary(M2)
+```
+```{r}
+nep_real_rt<- subset(clean_nep, Stimuli == "real")
+M3 <- lmer(data=nep_real_rt, formula =slideRate.RT~Group+(1|Subject))
+summary(M3)
+
+nep_pseudo_rt<- subset(clean_nep, Stimuli == "pseudo")
+M4 <- lmer(data=nep_pseudo_rt, formula =slideRate.RT~Group+(1|Subject))
+summary(M4)
+```
