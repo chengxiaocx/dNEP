@@ -1,6 +1,6 @@
 # dNEP
 
-dNEP is a research repository for analyzing behavioral and neuroimaging data related to lexicality and prosody processing in native Mandarin speakers and second language (L2) learners.
+dNEP is a research repository for analyzing behavioral and neuroimaging data related to lexicality and prosody processing in native speakers and second language (L2) learners.
 
 ## Overview
 
@@ -14,7 +14,7 @@ Participants completed word and sentence tasks across four functional runs (two 
 
 Groups:
 - Native speakers: 3102–3116 (n=15)
-- L2 learners: 3202–3216 (n=15, split into high- and low-proficiency subgroups)
+- L2 learners: 3202–3216 (n=15, split into higher and lower proficiency subgroups)
 
 ## Repository Contents
 
