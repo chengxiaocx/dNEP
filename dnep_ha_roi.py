@@ -167,7 +167,7 @@ def run_parcel_anova():
         rdf.to_csv(os.path.join(DATA_DIR, f'parcel_anova_{c_name}.csv'), index=False)
         print(f'{c_name}: {reject.sum()} / 180 significant (ANOVA FDR < 0.05)')
 
-        for pid in rdf.loc[reject, 'parcel']:
+        for pid in rdf.loc[rdf['significant_fdr'], 'parcel']: 
             col = f'p{pid}'
             sub = pdf[['group', col]].dropna()
             tukey = pairwise_tukeyhsd(sub[col], sub['group'], alpha=0.05)
