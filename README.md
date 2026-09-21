@@ -1,6 +1,6 @@
 # dNEP
 
-dNEP is a research repository for analyzing behavioral and neuroimaging data related to lexicality and prosody processing in native speakers and second language (L2) learners.
+dNEP is a research repository for analyzing behavioral and neuroimaging data related to lexicality and emotional prosody processing in native speakers and second language (L2) learners.
 
 ## Overview
 
